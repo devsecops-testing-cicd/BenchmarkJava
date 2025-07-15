@@ -1,0 +1,40 @@
+name: Build & Smoke‑test BenchmarkJava
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        run: docker build -t benchmark-java .
+
+      - name: Start container
+        run: |
+          docker run -d --name benchmark -p 8080:8080 benchmark-java
+          # wait for health‑check to turn healthy (max ~120 s)
+          for i in {1..24}; do
+            if [ "$(docker inspect -f '{{.State.Health.Status}}' benchmark)" = "healthy" ]; then
+              break
+            fi
+            sleep 5
+          done
+          docker ps -a
+
+      - name: Curl home page
+        run: curl -fs http://localhost:8080/benchmark/ | head -n 20
+
+      # Always tear down so the runner is clean
+      - name: Stop container
+        if: always()
+        run: docker rm -f benchmark
